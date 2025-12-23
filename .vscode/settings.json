@@ -5,7 +5,7 @@
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
   ],
-  "idf.port": "/dev/tty.wlan-debug",
+  "idf.port": "/dev/tty.usbmodem1101",
   "idf.toolsPath": "/Users/matebartfai/.espressif",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
@@ -17,5 +17,5 @@
     "--compile-commands-dir=${workspaceFolder}/build"
   ],
   "idf.monitorPort": "/dev/tty.usbmodem1101",
-  "idf.flashType": "JTAG"
+  "idf.flashType": "UART"
 }

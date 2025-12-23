@@ -1,0 +1,16 @@
+#ifndef WIFI_H
+#define WIFI_H
+
+#include <stdio.h>
+#include <inttypes.h>
+
+#include <string.h>
+#include <stdlib.h>
+
+#include "esp_log.h"
+
+uint8_t wifi_connect(char* ssid, char* password);
+uint8_t wifi_reconnect();
+uint8_t wifi_disconnect();
+
+#endif
