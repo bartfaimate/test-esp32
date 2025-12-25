@@ -1,6 +1,6 @@
 # ESP32-S3 Test project
 
-I am using an ESP32-S3 based devkit with touchscreen from Waveshare (TODO: put images and docs of the board here)
+I am using an ESP32-S3 based devkit with touchscreen from Waveshare [This](https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.8)
 
 
 ## Goal 🥅:

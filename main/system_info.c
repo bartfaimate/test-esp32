@@ -1,6 +1,9 @@
 
 #include "system_info.h"
 
+#include "esp_flash.h"
+
+
 void print_flash_size(esp_chip_info_t *chip_info)
 {
 

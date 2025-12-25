@@ -4,21 +4,26 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_chip_info.h"
-#include "esp_flash.h"
 #include "esp_system.h"
 
 #include "system_info.h"
 
-#include "wifi.h"
+#include "wifi/wifi.h"
 
-void app_main(void)
+#include "lvgl_task.h"
+
+#define MAIN_TASK_STACK 1024 * 12
+#define MAIN_TASK_CORE_ID 0
+#define MAIN_TASK_PRIO 5
+
+const char * SSID = "YOUR-WIFI";
+const char * PASSWORD = "YOUR-WIFI-PASSWORD";
+
+
+void driver_init()
 {
-  printf("Hello world\n");
-
-
-  /* Print chip information */
   esp_chip_info_t chip_info;
-  
+
   esp_chip_info(&chip_info);
   printf("This is %s chip with %d CPU core(s), %s%s%s%s\n",
          CONFIG_IDF_TARGET,
@@ -36,15 +41,45 @@ void app_main(void)
   print_heap_size();
   print_cpu_freq();
 
-  wifi_connect("test-wifi", "test-password");
-  
-  for (int i = 10; i >= 0; i--) {
-      printf("Restarting in %d seconds...\n", i);
-      vTaskDelay(1000 / portTICK_PERIOD_MS);
+  ESP_ERROR_CHECK(nvs_flash_init());
+
+
+  ESP_ERROR_CHECK(wifi_connect(SSID, PASSWORD));
+
+  return;
+}
+
+void main_task(void *arg) {
+  while (1)
+  {
+    vTaskDelay(pdMS_TO_TICKS(100));
+    // do something
+    // read input
+    // calculate
+    // render
   }
-  wifi_reconnect();
-  printf("Restarting now.\n");
-  fflush(stdout);
-  esp_restart();
+}
+
+void app_main(void)
+{
+  driver_init();
+
+  lvgl_start();
+
+  vTaskDelete(NULL);   // VERY IMPORTANT
+
+ 
+
+  // /* LVGL task on CPU1 */
+  // xTaskCreatePinnedToCore(
+  //     main_task,
+  //     "main",
+  //     MAIN_TASK_STACK,
+  //     NULL,
+  //     MAIN_TASK_PRIO,
+  //     NULL,
+  //     MAIN_TASK_CORE_ID);
+
+
 
 }
