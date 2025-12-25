@@ -43,10 +43,13 @@ void driver_init()
 
   ESP_ERROR_CHECK(nvs_flash_init());
 
-
-  ESP_ERROR_CHECK(wifi_connect(SSID, PASSWORD));
-
   return;
+}
+
+void wifi_task(void *arg) {
+  ESP_ERROR_CHECK(wifi_connect(SSID, PASSWORD));
+  vTaskDelete(NULL);
+
 }
 
 void main_task(void *arg) {
@@ -66,20 +69,25 @@ void app_main(void)
 
   lvgl_start();
 
-  vTaskDelete(NULL);   // VERY IMPORTANT
-
+  xTaskCreatePinnedToCore(
+    wifi_task,
+    "wifi",
+    4096,
+    NULL,
+    4,
+    NULL,
+    0
+);
  
-
-  // /* LVGL task on CPU1 */
-  // xTaskCreatePinnedToCore(
-  //     main_task,
-  //     "main",
-  //     MAIN_TASK_STACK,
-  //     NULL,
-  //     MAIN_TASK_PRIO,
-  //     NULL,
-  //     MAIN_TASK_CORE_ID);
-
-
+  xTaskCreatePinnedToCore(
+        main_task,
+        "main",
+        MAIN_TASK_STACK,
+        NULL,
+        MAIN_TASK_PRIO,
+        NULL,
+        MAIN_TASK_CORE_ID);
+    
+    vTaskDelete(NULL);   // VERY IMPORTANT 
 
 }
