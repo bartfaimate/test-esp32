@@ -16,8 +16,8 @@
 #define MAIN_TASK_CORE_ID 0
 #define MAIN_TASK_PRIO 5
 
-const char * SSID = "YOUR-WIFI";
-const char * PASSWORD = "YOUR-WIFI-PASSWORD";
+const char * SSID = "";
+const char * PASSWORD = "";
 
 
 void driver_init()
@@ -42,14 +42,17 @@ void driver_init()
   print_cpu_freq();
 
   ESP_ERROR_CHECK(nvs_flash_init());
+  
+  uint8_t wifi_inited;
+  wifi_inited = wifi_init();
 
   return;
 }
 
 void wifi_task(void *arg) {
-  ESP_ERROR_CHECK(wifi_connect(SSID, PASSWORD));
+  // ESP_ERROR_CHECK(wifi_connect(SSID, PASSWORD));
+  wifi_scan();
   vTaskDelete(NULL);
-
 }
 
 void main_task(void *arg) {
@@ -65,6 +68,7 @@ void main_task(void *arg) {
 
 void app_main(void)
 {
+
   driver_init();
 
   lvgl_start();

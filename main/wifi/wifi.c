@@ -1,39 +1,123 @@
 #include "wifi.h"
 
+#include "ui_events.h"
+#include "esp_event.h"
+
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 #define MAX_RETRY 5
+#include "freertos/queue.h"
 
 static const char *TAG = "wifi";
+
+static wifi_state_t s_current_state = WIFI_STATE_IDLE;
 
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
 
 static char SSID[128] = "";
 static char PASSWORD[128] = "";
+#define NAMESPACE "wifi"
 
+static uint8_t s_inited = false;
+
+extern QueueHandle_t ui_event_queue;
 /*************************************** */
 /** STATIC FUNCTIONS DECLARATIONS*/
 /*************************************** */
+static void handle_scan_done(void);
 
 static void wifi_event_handler(void *arg,
-  esp_event_base_t event_base,
-  int32_t event_id,
-  void *event_data);
-
+                               esp_event_base_t event_base,
+                               int32_t event_id,
+                               void *event_data);
 
 /*************************************** */
 /** FUNCTION DEFINITIONS */
 /*************************************** */
 
-uint8_t wifi_connect(char *ssid, char *password)
+uint8_t save_wifi_creds(char *ssid, char *password)
 {
 
-  strcpy(SSID, ssid);
-  strcpy(PASSWORD, password);
-  ESP_LOGI(TAG, "Connecting to '%s'....\n", ssid);
+  nvs_handle_t my_handle;
+  esp_err_t err;
 
-  s_wifi_event_group = xEventGroupCreate();
+  // Open NVS handle
+  err = nvs_open(NAMESPACE, NVS_READWRITE, &my_handle);
+  if (err != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+    return err;
+  }
+
+  // Write blob
+  ESP_LOGI(TAG, "Saving test data blob...");
+  err = nvs_set_str(my_handle, "ssid", ssid);
+  if (err != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to write ssid!");
+    nvs_close(my_handle);
+    return err;
+  }
+
+  err = nvs_set_str(my_handle, "password", password);
+  if (err != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to write password!");
+    nvs_close(my_handle);
+    return err;
+  }
+
+  // Commit
+  err = nvs_commit(my_handle);
+  if (err != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Failed to commit data");
+  }
+
+  nvs_close(my_handle);
+  return err;
+}
+
+uint8_t load_wifi_creds(wifi_ap_creds_t *creds)
+{
+
+  nvs_handle_t my_handle;
+  esp_err_t err;
+
+  err = nvs_open(NAMESPACE, NVS_READONLY, &my_handle);
+  if (err != ESP_OK)
+    return err;
+
+  // 1. Read test data blob
+  size_t read_size = 33;
+  ESP_LOGI(TAG, "Reading test data blob:");
+  char *ssid = malloc(read_size);
+  char *password = malloc(read_size);
+
+  err = nvs_get_str(my_handle, "ssid", ssid, &read_size);
+  if (err == ESP_OK)
+  {
+  }
+  else if (err == ESP_ERR_NVS_NOT_FOUND)
+  {
+    ESP_LOGW(TAG, "Test data not found!");
+  }
+
+  err = nvs_get_str(my_handle, "password", password, &read_size);
+  strcpy(creds->ssid, ssid);
+  strcpy(creds->password, password);
+
+  free(ssid);
+  free(password);
+
+  return err;
+}
+
+uint8_t wifi_init()
+{
+  s_current_state = WIFI_STATE_INIT;
+  ESP_LOGI(TAG, "Init wifi ....\n");
 
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -42,6 +126,7 @@ uint8_t wifi_connect(char *ssid, char *password)
 
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
   ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+  ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
 
   ESP_ERROR_CHECK(
       esp_event_handler_instance_register(
@@ -59,11 +144,29 @@ uint8_t wifi_connect(char *ssid, char *password)
           NULL,
           NULL));
 
+  s_wifi_event_group = xEventGroupCreate();
+  assert(s_wifi_event_group);
+
+  s_inited = true;
+  s_current_state = WIFI_STATE_IDLE;
+  return 0;
+}
+
+uint8_t wifi_connect(char *ssid, char *password)
+{
+  if (!s_inited)
+  {
+    ESP_LOGE(TAG, "WiFi not initialized");
+    return ESP_FAIL;
+  }
+  s_current_state = WIFI_STATE_CONNECTING;
+
+  strncpy(SSID, ssid, sizeof(SSID));
+  strncpy(PASSWORD, password, sizeof(PASSWORD));
+
   wifi_config_t wifi_config = {0};
-  strncpy((char *)wifi_config.sta.ssid, ssid,
-          sizeof(wifi_config.sta.ssid));
-  strncpy((char *)wifi_config.sta.password, password,
-          sizeof(wifi_config.sta.password));
+  strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
+  strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
 
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
@@ -78,25 +181,36 @@ uint8_t wifi_connect(char *ssid, char *password)
 
   if (bits & WIFI_CONNECTED_BIT)
   {
-    ESP_LOGI(TAG, "Connected to Wi-Fi");
+    s_current_state = WIFI_STATE_CONNECTED;
     return ESP_OK;
   }
-
-  ESP_LOGE(TAG, "Failed to connect to Wi-Fi");
-  return ESP_FAIL;
+  else
+  {
+    s_current_state = WIFI_STATE_FAILED;
+    return ESP_FAIL;
+  }
+  return (bits & WIFI_CONNECTED_BIT) ? ESP_OK : ESP_FAIL;
 }
 
 uint8_t wifi_reconnect()
 {
+  if (!s_inited)
+  {
+    ESP_LOGW(TAG, "Wifi is not initialised ....\n");
+    return -1;
+  }
+
+  if (strlen(SSID) <= 1)
+  {
+    ESP_LOGW(TAG, "No Network is selected....\n");
+    return -1;
+  }
+
   ESP_LOGW(TAG, "Reconnecting to '%s'....\n", SSID);
+
   esp_err_t result;
   uint8_t retry_num = 0;
-  do
-  {
-    result = esp_wifi_connect();
-    retry_num++;
-  } while (ESP_OK != result || retry_num >= MAX_RETRY);
-
+  result = esp_wifi_connect();
   return result;
 }
 
@@ -110,20 +224,27 @@ static void wifi_event_handler(void *arg,
                                int32_t event_id,
                                void *event_data)
 {
+  ui_event_t evt;
+
   if (event_base == WIFI_EVENT)
   {
-
     switch (event_id)
     {
 
     case WIFI_EVENT_STA_START:
-      esp_wifi_connect();
+      evt = UI_WIFI_CONNECTING;
+      xQueueSend(ui_event_queue, &evt, 0);
+
+      wifi_reconnect();
       break;
 
     case WIFI_EVENT_STA_DISCONNECTED:
+      evt = UI_WIFI_CONNECTING;
+      xQueueSend(ui_event_queue, &evt, 0);
+
       if (s_retry_num < MAX_RETRY)
       {
-        esp_wifi_connect();
+        wifi_reconnect();
         s_retry_num++;
         ESP_LOGW(TAG, "Retrying connection (%d)", s_retry_num);
       }
@@ -131,6 +252,11 @@ static void wifi_event_handler(void *arg,
       {
         xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
       }
+      break;
+    case WIFI_EVENT_SCAN_DONE:
+      handle_scan_done();
+      evt = UI_WIFI_SCAN_DONE;
+      xQueueSend(ui_event_queue, &evt, 0);
       break;
 
     default:
@@ -143,7 +269,91 @@ static void wifi_event_handler(void *arg,
 
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
     ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
+    evt = UI_WIFI_CONNECTED;
+    xQueueSend(ui_event_queue, &evt, 0);
+
     s_retry_num = 0;
     xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
   }
+}
+
+uint8_t wifi_scan(void)
+{
+  if (s_current_state == WIFI_STATE_SCANNING)
+  {
+    return -1;
+  }
+
+  s_current_state = WIFI_STATE_SCANNING;
+
+  wifi_country_t country = {
+      .cc = "AT",
+      .schan = 1,
+      .nchan = 13,
+      .policy = WIFI_COUNTRY_POLICY_AUTO};
+
+  ESP_ERROR_CHECK(esp_wifi_set_country(&country));
+  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+  ESP_ERROR_CHECK(esp_wifi_start());
+
+  wifi_scan_config_t scan_cfg = {
+      .show_hidden = false,
+      .scan_type = WIFI_SCAN_TYPE_ACTIVE};
+
+  // esp_err_t res;
+  // res = esp_wifi_scan_start(&scan_cfg, false);
+  // if (res != ESP_OK)
+  // {
+  //   ESP_LOGE(TAG, "Wifi scanning went wrong %d\n", res);
+  // }
+  // return res;
+
+  esp_err_t err = esp_wifi_scan_start(&scan_cfg, false); // BLOCK
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Scan failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    // handle_scan_done();
+    return ESP_OK;
+}
+
+static void handle_scan_done(void)
+{
+  uint16_t count = 0;
+  esp_wifi_scan_get_ap_num(&count);
+
+  if (count == 0)
+  {
+    ESP_LOGW(TAG, "No APs found");
+    s_current_state = WIFI_STATE_IDLE;
+    return;
+  }
+
+  wifi_ap_record_t *records = malloc(sizeof(wifi_ap_record_t) * count);
+  esp_wifi_scan_get_ap_records(&count, records);
+
+  // Convert to UI-friendly struct
+  wifi_ap_info_t *list = malloc(sizeof(wifi_ap_info_t) * count);
+  for (int i = 0; i < count; i++)
+  {
+    strncpy(list[i].ssid, (char *)records[i].ssid, 32);
+    list[i].ssid[32] = 0;
+    list[i].rssi = records[i].rssi;
+    list[i].authmode = records[i].authmode;
+  }
+
+  // ui_wifi_show_list(list, count); // UI callback
+  int i;
+  for (i = 0; i < count; i++)
+  {
+    printf("%s -- %d \n", list[i].ssid, list[i].rssi);
+  }
+
+  free(records);
+  free(list);
+
+
+  s_current_state = WIFI_STATE_IDLE;
+
 }

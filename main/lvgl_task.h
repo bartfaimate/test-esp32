@@ -9,7 +9,17 @@
 #include "esp_log.h"
 #include "driver/gpio.h"
 #include "driver/i2c.h"
+#include "driver/ledc.h"
 
+
+
+/********************** PWM *******************/
+
+#define BACKLIGHT_LEDC_TIMER  LEDC_TIMER_0
+#define BACKLIGHT_LEDC_MODE   LEDC_LOW_SPEED_MODE
+#define BACKLIGHT_LEDC_CH     LEDC_CHANNEL_0
+#define BACKLIGHT_LEDC_FREQ   5000   // 5 kHz
+#define BACKLIGHT_LEDC_RES    LEDC_TIMER_8_BIT  // 0–255
 
 /********************* I2C *********************/
 #define I2C_SCL_IO                  10         /*!< GPIO number used for I2C master clock */
@@ -22,5 +32,9 @@
 
 void lvgl_start(void);
 void lcd_init(void);
+
+void backlight_init() ;
+
+void set_brightness(uint8_t brightness);
 
 #endif

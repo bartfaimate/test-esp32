@@ -55,6 +55,7 @@ static esp_err_t cst328_read(uint8_t reg, uint8_t *buf, size_t len)
 /* ---------- TOUCH ---------- */
 static bool cst328_read_xy(uint16_t *x, uint16_t *y)
 {
+  
   if (!touch_pending)
     return false;
 
@@ -70,26 +71,24 @@ static bool cst328_read_xy(uint16_t *x, uint16_t *y)
     return false;
 
   // reading x cords
-  
+
   uint8_t buf[4];
   // read 4 bytes
   if (cst328_read(0x01, buf, 4) != ESP_OK)
-  return false;
-  
+    return false;
+
   // printf("got 4 bytes ox%x ox%x ox%x\n", buf[0], buf[1], buf[2]);
 
-  uint16_t rx = ((buf[0] ) << 4 ) | (buf[2] & 0xF0) >> 4 ;
-  uint16_t ry = ((buf[1] ) << 4) | (buf[2] & 0x0F);
+  uint16_t rx = ((buf[0]) << 4) | (buf[2] & 0xF0) >> 4;
+  uint16_t ry = ((buf[1]) << 4) | (buf[2] & 0x0F);
 
   // printf("x: %x %d, y: %d\n", rx, rx, ry);
 
-  /* Portrait ST7789 mapping */
+  if (rx < 0 || rx > LCD_H_RES || ry < 0 || ry > LCD_V_RES)
+    return false;
+
   *x = rx;
   *y = ry;
-
-  // /* Clear interrupt */
-  // uint8_t clr;
-  // cst328_read(0x06, &clr, 1);
 
   return true;
 }

@@ -6,6 +6,9 @@ idf_component_register(
   "lvgl_task.c"
   "I2C/I2C.c"
   "touch_driver/cst328.c"
+  "ui/ui.c"
+  "ui/ui_wifi.c"
+  "ui/ui_control_center.c"
 
   REQUIRES 
     lvgl 
@@ -21,4 +24,5 @@ idf_component_register(
   "./touch_driver"
   "./I2C"
   "./wifi"
+  "./ui"
   ".")

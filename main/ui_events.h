@@ -1,0 +1,13 @@
+#pragma once
+
+typedef enum {
+    UI_WIFI_CONNECTED = 0,
+    UI_WIFI_DISCONNECTED,
+    UI_WIFI_SCANNING,
+    UI_WIFI_CONNECTING,
+    UI_WIFI_SCAN_DONE,
+
+    UI_SYSTEM_STARTING,
+    UI_SYSTEM_STARTED,
+
+} ui_event_t;

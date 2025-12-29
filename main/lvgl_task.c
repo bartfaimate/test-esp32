@@ -7,15 +7,21 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
+
 #include "esp_log.h"
 #include "driver/gpio.h"
 #include "touch_driver/cst328.h"
+
+#include "ui.h"
+#include "ui_events.h"
 
 #define TAG "LVGL_INIT"
 
 /* Display resolution */
 #define LCD_H_RES 240
 #define LCD_V_RES 320
+#define LCD_DISPLAY "ST7789"
 
 /* SPI pins */
 #define PIN_NUM_LCD_MOSI 45
@@ -27,15 +33,18 @@
 #define PIN_NUM_LCD_BACK_LIGHT 5
 
 #define LCD_HOST SPI2_HOST
+#define LCD_SPI_CLK_HZ  80000000
 
 /* LVGL Task Settings */
-#define LVGL_TASK_STACK (1024 * 8)
+#define LVGL_TASK_STACK (1024 * 12)
 #define LVGL_TASK_PRIO 5
 #define LVGL_CORE_ID 1
 
 /* Draw Buffer - 1/8th of screen size is usually enough and fits in internal RAM */
 #define DRAW_BUF_LINES 40
 #define DRAW_BUF_SIZE (LCD_H_RES * DRAW_BUF_LINES * sizeof(lv_color16_t))
+
+QueueHandle_t ui_event_queue = NULL;
 
 /* Memory alignment is critical for DMA */
 static uint8_t buf1[DRAW_BUF_SIZE] LV_ATTRIBUTE_MEM_ALIGN;
@@ -45,66 +54,67 @@ static lv_display_t *s_disp = NULL;
 
 /* ---------------- CALLBACKS ---------------- */
 
-static void lv_tick_cb(void *arg) {
-    lv_tick_inc(1);
-}
-
-static bool lcd_flush_ready_cb(esp_lcd_panel_io_handle_t io, esp_lcd_panel_io_event_data_t *edata, void *user_ctx) {
-    if (s_disp) {
-        lv_display_flush_ready(s_disp);
-    }
-    return false;
-}
-
-static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
-    /* Copy the pixel data to the LCD controller */
-    esp_lcd_panel_draw_bitmap(panel_handle, area->x1, area->y1, area->x2 + 1, area->y2 + 1, px_map);
-}
-
-static void btn_event_cb(lv_event_t *e)
+static void lv_tick_cb(void *arg)
 {
-    ESP_LOGI("UI", "Button clicked");
+  lv_tick_inc(1);
 }
-/* ---------------- UI ---------------- */
 
-static void init_gui() {
-    lv_obj_t *screen = lv_screen_active();
-    lv_obj_set_style_bg_color(screen, lv_color_hex(0x003a57), LV_PART_MAIN);
+static bool lcd_flush_ready_cb(esp_lcd_panel_io_handle_t io, esp_lcd_panel_io_event_data_t *edata, void *user_ctx)
+{
+  if (s_disp)
+  {
+    lv_display_flush_ready(s_disp);
+  }
+  return false;
+}
 
-    /* Hello World Label */
-    lv_obj_t *label = lv_label_create(screen);
-    lv_label_set_text(label, "Hello World");
-    lv_obj_set_style_text_color(label, lv_color_white(), 0);
-    lv_obj_align(label, LV_ALIGN_CENTER, 0, 20);
+static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
+{
+  esp_err_t res;
+  /* Copy the pixel data to the LCD controller */
+  res = esp_lcd_panel_draw_bitmap(panel_handle, area->x1, area->y1, area->x2 + 1, area->y2 + 1, px_map);
 
+  if(res != ESP_OK) { ESP_LOGE(TAG, "Something is wrong\n");}
 
-    /* Button */
-    lv_obj_t *btn1 = lv_button_create(screen);
-    lv_obj_set_size(btn1, 120, 50);
-    lv_obj_align(btn1, LV_ALIGN_CENTER, 0, -40);
-    lv_obj_add_event_cb(btn1, btn_event_cb, LV_EVENT_CLICKED, NULL);
-
-    
-    lv_obj_t *btn_label = lv_label_create(btn1);
-    lv_label_set_text(btn_label, "Button");
-    lv_obj_center(btn_label);
 }
 
 /* ---------------- TASK ---------------- */
+extern QueueHandle_t ui_event_queue;
 
-static void lvgl_task(void *arg) {
-    ESP_LOGI(TAG, "Starting LVGL main loop");
-    init_gui();
-    
-    while (1) {
-        uint32_t time_till_next = lv_timer_handler();
-        vTaskDelay(pdMS_TO_TICKS(time_till_next > 0 ? time_till_next : 10));
+static void lvgl_task(void *arg)
+{
+  ESP_LOGI(TAG, "Starting LVGL main loop");
+  init_gui();
+  ui_event_t evt;
+
+  while (1)
+  {
+    uint32_t time_till_next = lv_timer_handler();
+    while (xQueueReceive(ui_event_queue, &evt, 0))
+    {
+      switch (evt)
+      {
+      case UI_WIFI_CONNECTED:
+        set_wifi_label("Wifi: connected");
+
+        break;
+
+      case UI_WIFI_DISCONNECTED:
+        set_wifi_label("Wifi: disconnected");
+
+        break;
+      default:
+        break;
+      }
     }
+    vTaskDelay(pdMS_TO_TICKS(time_till_next > 0 ? time_till_next : 10));
+  }
 }
 
 /* ---------------- INIT ---------------- */
 
-void lcd_init(void) {
+void lcd_init(void)
+{
   /* 1. SPI Bus Initialization */
   spi_bus_config_t buscfg = {
       .mosi_io_num = PIN_NUM_LCD_MOSI,
@@ -121,9 +131,10 @@ void lcd_init(void) {
   esp_lcd_panel_io_spi_config_t io_cfg = {
       .dc_gpio_num = PIN_NUM_LCD_DC,
       .cs_gpio_num = PIN_NUM_LCD_CS,
-      .pclk_hz = 40 * 1000 * 1000,
+      .pclk_hz = LCD_SPI_CLK_HZ,
       .lcd_cmd_bits = 8,
       .lcd_param_bits = 8,
+      
       .spi_mode = 0,
       .trans_queue_depth = 10,
       .on_color_trans_done = lcd_flush_ready_cb,
@@ -133,7 +144,7 @@ void lcd_init(void) {
   /* 3. Install Display Driver (ST7789) */
   esp_lcd_panel_dev_config_t panel_cfg = {
       .reset_gpio_num = PIN_NUM_LCD_RST,
-      .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR,
+      .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
       .bits_per_pixel = 16,
   };
   ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(io_handle, &panel_cfg, &panel_handle));
@@ -141,50 +152,80 @@ void lcd_init(void) {
   ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
   ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
   ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, true));
-  
+
   /* Turn on Backlight */
-  gpio_set_direction(PIN_NUM_LCD_BACK_LIGHT, GPIO_MODE_OUTPUT);
-  gpio_set_level(PIN_NUM_LCD_BACK_LIGHT, 1);
+  // gpio_set_direction(PIN_NUM_LCD_BACK_LIGHT, GPIO_MODE_OUTPUT);
+  // gpio_set_level(PIN_NUM_LCD_BACK_LIGHT, 1);
+
+  backlight_init();
   ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
 }
 
-void lvgl_start(void) {
-   lcd_init();
-  
-    /* 4. Initialize LVGL */
-    lv_init();
+void lvgl_start(void)
+{
+  /* init LCD */
+  lcd_init();
 
-    /* Create Display */
-    s_disp = lv_display_create(LCD_H_RES, LCD_V_RES);
-    
-    /* Configure the draw buffer */
-    lv_display_set_buffers(s_disp, buf1, NULL, DRAW_BUF_SIZE, LV_DISPLAY_RENDER_MODE_PARTIAL);
-    lv_display_set_flush_cb(s_disp, lvgl_flush_cb);
-    
-    /* init touch */
-    cst328_lvgl_init(s_disp);
+  /*  Initialize LVGL */
+  lv_init();
 
+  /* Create Display */
+  s_disp = lv_display_create(LCD_H_RES, LCD_V_RES);
 
-    /* IMPORTANT: Byte swapping for RGB565 on ESP32 SPI */
-    #if LV_USE_DRAW_SW
-        lv_display_set_color_format(s_disp, LV_COLOR_FORMAT_RGB565);
-        // If your colors are swapped (e.g., Red looks Blue), toggle this:
-        // lv_draw_sw_rgb565_swap(buf1, DRAW_BUF_SIZE / 2); 
-    #endif
+  /* Configure the draw buffer */
+  lv_display_set_buffers(s_disp, buf1, NULL, DRAW_BUF_SIZE, LV_DISPLAY_RENDER_MODE_PARTIAL);
+  lv_display_set_flush_cb(s_disp, lvgl_flush_cb);
 
-    /* 5. Set up LVGL Tick Timer */
-    const esp_timer_create_args_t tick_args = {
-        .callback = lv_tick_cb,
-        .name = "lvgl_tick"
+  /* init touch */
+  cst328_lvgl_init(s_disp);
+
+  /* 5. Set up LVGL Tick Timer */
+  const esp_timer_create_args_t tick_args = {
+      .callback = lv_tick_cb,
+      .name = "lvgl_tick"};
+  esp_timer_handle_t tick_timer;
+  ESP_ERROR_CHECK(esp_timer_create(&tick_args, &tick_timer));
+  ESP_ERROR_CHECK(esp_timer_start_periodic(tick_timer, 1000));
+
+  ui_event_queue = xQueueCreate(8, sizeof(ui_event_t));
+  assert(ui_event_queue);
+
+  /* 6. Launch LVGL Task */
+  xTaskCreatePinnedToCore(lvgl_task, "lvgl", LVGL_TASK_STACK, NULL, LVGL_TASK_PRIO, NULL, LVGL_CORE_ID);
+
+  ESP_LOGI(TAG, "LVGL successfully initialized");
+}
+
+void backlight_init() {
+
+    ledc_timer_config_t timer_conf = {
+        .speed_mode       = BACKLIGHT_LEDC_MODE,
+        .timer_num        = BACKLIGHT_LEDC_TIMER,
+        .duty_resolution  = BACKLIGHT_LEDC_RES,
+        .freq_hz          = BACKLIGHT_LEDC_FREQ,
+        .clk_cfg          = LEDC_AUTO_CLK,
     };
-    esp_timer_handle_t tick_timer;
-    ESP_ERROR_CHECK(esp_timer_create(&tick_args, &tick_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(tick_timer, 1000));
+    ESP_ERROR_CHECK(ledc_timer_config(&timer_conf));
 
+    ledc_channel_config_t channel_conf = {
+        .gpio_num   = PIN_NUM_LCD_BACK_LIGHT,
+        .speed_mode = BACKLIGHT_LEDC_MODE,
+        .channel    = BACKLIGHT_LEDC_CH,
+        .timer_sel  = BACKLIGHT_LEDC_TIMER,
+        .duty       = 255,   // start at full brightness
+        .hpoint     = 0,
+    };
+    ESP_ERROR_CHECK(ledc_channel_config(&channel_conf));
 
+}
 
-    /* 6. Launch LVGL Task */
-    xTaskCreatePinnedToCore(lvgl_task, "lvgl", LVGL_TASK_STACK, NULL, LVGL_TASK_PRIO, NULL, LVGL_CORE_ID);
+void set_brightness(uint8_t brightness) {
+  if (brightness > 100) brightness = 100;
 
-    ESP_LOGI(TAG, "LVGL successfully initialized");
+    // Map 0–100% → 0–255 duty
+    uint32_t duty = (brightness * 255) / 100;
+
+    ledc_set_duty(BACKLIGHT_LEDC_MODE, BACKLIGHT_LEDC_CH, duty);
+    ledc_update_duty(BACKLIGHT_LEDC_MODE, BACKLIGHT_LEDC_CH);
+
 }
