@@ -21,4 +21,8 @@ void init_gui(void);
 void set_wifi_label(char* text);
 
 
+lv_obj_t *ui_wifi_button_create(
+  lv_obj_t *parent,
+  lv_event_cb_t event_cb
+);
 #endif

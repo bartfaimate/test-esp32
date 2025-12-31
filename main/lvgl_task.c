@@ -23,6 +23,8 @@
 #define LCD_V_RES 320
 #define LCD_DISPLAY "ST7789"
 
+#define SWAP_BYTES 1 // change for big endian vs little endian
+
 /* SPI pins */
 #define PIN_NUM_LCD_MOSI 45
 #define PIN_NUM_LCD_MISO -1
@@ -70,12 +72,32 @@ static bool lcd_flush_ready_cb(esp_lcd_panel_io_handle_t io, esp_lcd_panel_io_ev
 
 static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
 {
+#if !SWAP_BYTES
+
   esp_err_t res;
   /* Copy the pixel data to the LCD controller */
   res = esp_lcd_panel_draw_bitmap(panel_handle, area->x1, area->y1, area->x2 + 1, area->y2 + 1, px_map);
 
   if(res != ESP_OK) { ESP_LOGE(TAG, "Something is wrong\n");}
+#else
+  uint32_t px_count =
+        (area->x2 - area->x1 + 1) *
+        (area->y2 - area->y1 + 1);
 
+    uint16_t *buf = (uint16_t *)px_map;
+
+    for (uint32_t i = 0; i < px_count; i++) {
+        uint16_t c = buf[i];
+        buf[i] = (c >> 8) | (c << 8);
+    }
+
+    esp_lcd_panel_draw_bitmap(
+        panel_handle,
+        area->x1, area->y1,
+        area->x2 + 1, area->y2 + 1,
+        buf
+    );
+#endif
 }
 
 /* ---------------- TASK ---------------- */
@@ -152,10 +174,6 @@ void lcd_init(void)
   ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
   ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
   ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, true));
-
-  /* Turn on Backlight */
-  // gpio_set_direction(PIN_NUM_LCD_BACK_LIGHT, GPIO_MODE_OUTPUT);
-  // gpio_set_level(PIN_NUM_LCD_BACK_LIGHT, 1);
 
   backlight_init();
   ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
