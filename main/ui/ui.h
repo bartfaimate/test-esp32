@@ -9,7 +9,6 @@
 #include "esp_log.h"
 
 #define TAG "LVGL_INIT"
-#define LV_FONT_ANTIALIAS 0
 
 
 /* Display resolution */
@@ -18,11 +17,7 @@
 
 void init_gui(void);
 
-void set_wifi_label(char* text);
+lv_obj_t * create_wifi_list();
 
 
-lv_obj_t *ui_wifi_button_create(
-  lv_obj_t *parent,
-  lv_event_cb_t event_cb
-);
 #endif

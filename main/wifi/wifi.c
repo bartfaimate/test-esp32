@@ -2,11 +2,13 @@
 
 #include "ui_events.h"
 #include "esp_event.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
+#include "freertos/queue.h"
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 #define MAX_RETRY 5
-#include "freertos/queue.h"
 
 static const char *TAG = "wifi";
 
@@ -300,15 +302,7 @@ uint8_t wifi_scan(void)
       .show_hidden = false,
       .scan_type = WIFI_SCAN_TYPE_ACTIVE};
 
-  // esp_err_t res;
-  // res = esp_wifi_scan_start(&scan_cfg, false);
-  // if (res != ESP_OK)
-  // {
-  //   ESP_LOGE(TAG, "Wifi scanning went wrong %d\n", res);
-  // }
-  // return res;
-
-  esp_err_t err = esp_wifi_scan_start(&scan_cfg, false); // BLOCK
+  esp_err_t err = esp_wifi_scan_start(&scan_cfg, false);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Scan failed: %s", esp_err_to_name(err));
         return err;
@@ -348,7 +342,23 @@ static void handle_scan_done(void)
   for (i = 0; i < count; i++)
   {
     printf("%s -- %d \n", list[i].ssid, list[i].rssi);
+    ui_wifi_scan_result_t evt = {0};
+
+    strncpy(evt.ap.ssid,
+            (char *)list[i].ssid,
+            sizeof(evt.ap.ssid) - 1);
+
+    evt.ap.rssi = list[i].rssi;
+    evt.ap.secure = list[i].authmode != WIFI_AUTH_OPEN;
+
+    ui_event_t type = UI_WIFI_SCAN_RESULT;
+    xQueueSend(ui_event_queue, &type, 0);
+    xQueueSend(ui_event_queue, &evt, 0);
   }
+
+    
+ui_event_t done = UI_WIFI_SCAN_DONE;
+xQueueSend(ui_event_queue, &done, 0);
 
   free(records);
   free(list);

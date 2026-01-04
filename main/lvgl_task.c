@@ -14,7 +14,10 @@
 #include "touch_driver/cst328.h"
 
 #include "ui.h"
+#include "ui_wifi.h"
 #include "ui_events.h"
+
+#include "wifi.h"
 
 #define TAG "LVGL_INIT"
 
@@ -117,14 +120,25 @@ static void lvgl_task(void *arg)
       switch (evt)
       {
       case UI_WIFI_CONNECTED:
-        set_wifi_label("Wifi: connected");
+      //TODO:
 
         break;
 
       case UI_WIFI_DISCONNECTED:
-        set_wifi_label("Wifi: disconnected");
+      //TODO:
 
         break;
+      case UI_WIFI_SCAN_START:
+        wifi_scan();
+        create_wifi_list();
+        
+        break;
+      case UI_WIFI_SCAN_RESULT:
+      ui_wifi_scan_result_t res;
+        xQueueReceive(ui_event_queue, &res, 0);
+        ui_wifi_add_result_to_wifi_list(&res);
+        break;
+
       default:
         break;
       }
@@ -191,6 +205,7 @@ void lvgl_start(void)
   s_disp = lv_display_create(LCD_H_RES, LCD_V_RES);
 
   /* Configure the draw buffer */
+  // lv_display_set_color_format(s_disp, LV_COLOR_FORMAT_RGB565_SWAPPED);
   lv_display_set_buffers(s_disp, buf1, NULL, DRAW_BUF_SIZE, LV_DISPLAY_RENDER_MODE_PARTIAL);
   lv_display_set_flush_cb(s_disp, lvgl_flush_cb);
 

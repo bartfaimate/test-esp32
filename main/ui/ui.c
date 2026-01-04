@@ -1,24 +1,42 @@
 
 #include "ui.h"
-#include "lvgl.h"
-#include "lv_conf.h"
-#include "ui_control_center.h"
 #include "lvgl_task.h"
+#include "ui_control_center.h"
+#include "ui_events.h"
+#include "ui_wifi.h"
 
+#include "lv_conf.h"
+#include "lvgl.h"
+#include "freertos/queue.h"
+
+
+extern QueueHandle_t ui_event_queue;
 
 static lv_obj_t *wifi_label;
-
+static lv_obj_t *settings_tab = NULL ;
 
 static void brightness_slider(lv_obj_t *parent);
 
+static lv_obj_t *wifi_list = NULL;
 
-static void btn_event_cb(lv_event_t *e)
+
+static void wifi_btn_cb(lv_event_t *e)
 {
-    ESP_LOGI("UI", "Button clicked");
+  if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+  {
+    ui_event_t evt = UI_WIFI_SCAN_START;
+    xQueueSend(ui_event_queue, &evt, 0);
+  }
 }
 
-static void wifi_btn_cb(lv_event_t * e) {
+lv_obj_t *create_wifi_list() {
+  if(wifi_list) {
+    lv_obj_del(wifi_list);
+  }
 
+  wifi_list = ui_wifi_create_wifi_list(settings_tab);
+  lv_obj_center(wifi_list);
+  return wifi_list;
 }
 
 
@@ -32,7 +50,7 @@ void lv_tabview(lv_obj_t *screen)
 
     /*Add 3 tabs (the tabs are page (lv_page) and can be scrolled*/
     lv_obj_t * tab1 = lv_tabview_add_tab(tabview, "Home");
-    lv_obj_t * settings_tab = lv_tabview_add_tab(tabview, "Settings");
+    settings_tab = lv_tabview_add_tab(tabview, "Settings");
 
     lv_obj_set_style_bg_color(tab1, lv_color_hex(0x0000ff), LV_PART_MAIN);
 
@@ -42,55 +60,6 @@ void lv_tabview(lv_obj_t *screen)
     lv_obj_align(button, LV_ALIGN_TOP_RIGHT, -10, 10);
 }
 
-lv_obj_t *ui_wifi_button_create(
-  lv_obj_t *parent,
-  lv_event_cb_t event_cb
-)
-{
-  /* Create button */
-  lv_obj_t *btn = lv_button_create(parent);
-  lv_obj_set_size(btn, 64, 64);
-  lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
-
-  /* Background */
-  lv_obj_set_style_bg_color(
-      btn,
-      lv_color_hex(0x2C2C2E),  /* iOS dark gray */
-      0
-  );
-  lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-
-  /* Pressed state */
-  lv_obj_set_style_bg_color(
-      btn,
-      lv_color_hex(0x3A3A3C),
-      LV_STATE_PRESSED
-  );
-
-  /* Remove outline */
-  lv_obj_set_style_border_width(btn, 0, 0);
-
-  /* Icon */
-  lv_obj_t *icon = lv_label_create(btn);
-  lv_label_set_text(icon, LV_SYMBOL_WIFI);
-  lv_obj_set_style_text_color(
-      icon,
-      lv_color_white(),
-      0
-  );
-  lv_obj_set_style_text_font(
-      icon,
-      &lv_font_montserrat_28,
-      0
-  );
-  lv_obj_center(icon);
-
-  if (event_cb) {
-      lv_obj_add_event_cb(btn, event_cb, LV_EVENT_CLICKED, NULL);
-  }
-
-  return btn;
-}
 
 static void slider_event_cb(lv_event_t * e)
 {
@@ -102,8 +71,6 @@ static void slider_event_cb(lv_event_t * e)
 }
 
 static void brightness_slider(lv_obj_t *parent) {
-  static lv_obj_t * label;
-
     /*Create a slider in the center of the display*/
     lv_obj_t * slider = lv_slider_create(parent);
     lv_slider_set_range(slider, 10, 100);
@@ -111,7 +78,6 @@ static void brightness_slider(lv_obj_t *parent) {
     lv_obj_set_width(slider, 200);                          /*Set the width*/
     lv_obj_center(slider);                                  /*Align to the center of the parent (screen)*/
     lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, NULL);     /*Assign an event function*/
-
 }
 
 void init_gui() {
@@ -119,32 +85,7 @@ void init_gui() {
     // lv_obj_set_style_bg_color(screen, lv_color_hex(0x0000ff), LV_PART_MAIN);
     lv_tabview(screen);
 
-    // /* Hello World Label */
-    // wifi_label = lv_label_create(screen);
-    // lv_label_set_text(wifi_label, "Starting...");
-    // lv_obj_set_style_text_color(wifi_label, lv_color_white(), 0);
-    // lv_obj_align(wifi_label, LV_ALIGN_CENTER, 0, 20);
-
-
-    // /* Button */
-    // lv_obj_t *btn1 = lv_button_create(screen);
-    // lv_obj_set_size(btn1, 120, 50);
-    // lv_obj_align(btn1, LV_ALIGN_CENTER, 0, -40);
-    // lv_obj_add_event_cb(btn1, btn_event_cb, LV_EVENT_CLICKED, NULL);
-
-    
-    // lv_obj_t *btn_label = lv_label_create(btn1);
-    // lv_label_set_text(btn_label, "Button");
-    // lv_obj_center(btn_label);
-
-    // LV_FONT_DECLARE(lv_font_montserrat_14);
-    // lv_obj_set_style_text_font(wifi_label, &lv_font_montserrat_14, 0);
-
+ 
     ui_control_center_init();
 
-}
-
-void set_wifi_label(char* text) {
-  lv_label_set_text(wifi_label, text);
-  lv_obj_set_style_text_color(wifi_label, lv_color_white(), 0);
 }
