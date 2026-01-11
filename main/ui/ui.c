@@ -24,7 +24,8 @@ static void wifi_btn_cb(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED)
   {
-    ui_event_t evt = UI_WIFI_SCAN_START;
+    ui_event_t evt = { 0};
+    evt.type = UI_WIFI_SCAN_START;
     xQueueSend(ui_event_queue, &evt, 0);
   }
 }
@@ -34,7 +35,8 @@ lv_obj_t *create_wifi_list() {
     lv_obj_del(wifi_list);
   }
 
-  wifi_list = ui_wifi_create_wifi_list(settings_tab);
+  // wifi_list = ui_wifi_create_wifi_list(settings_tab);
+  wifi_list = ui_wifi_msg_box();
   lv_obj_center(wifi_list);
   return wifi_list;
 }
@@ -56,17 +58,16 @@ void lv_tabview(lv_obj_t *screen)
 
     brightness_slider(settings_tab);
 
-    lv_obj_t *button = ui_wifi_button_create(settings_tab, wifi_btn_cb);
-    lv_obj_align(button, LV_ALIGN_TOP_RIGHT, -10, 10);
+    lv_obj_t *wifi_button = ui_wifi_button_create(settings_tab, wifi_btn_cb);
+    lv_obj_align(wifi_button, LV_ALIGN_TOP_RIGHT, -10, 10);
 }
 
 
-static void slider_event_cb(lv_event_t * e)
+static void brightness_slider_event_cb(lv_event_t * e)
 {
   uint8_t value;
     lv_obj_t * slider = lv_event_get_target_obj(e);
     value = lv_slider_get_value(slider);
-
     set_brightness(value);
 }
 
@@ -77,7 +78,7 @@ static void brightness_slider(lv_obj_t *parent) {
     lv_slider_set_value(slider, 66, false);
     lv_obj_set_width(slider, 200);                          /*Set the width*/
     lv_obj_center(slider);                                  /*Align to the center of the parent (screen)*/
-    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, NULL);     /*Assign an event function*/
+    lv_obj_add_event_cb(slider, brightness_slider_event_cb, LV_EVENT_VALUE_CHANGED, NULL);     /*Assign an event function*/
 }
 
 void init_gui() {

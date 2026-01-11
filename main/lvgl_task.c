@@ -58,7 +58,9 @@ static esp_lcd_panel_handle_t panel_handle;
 static lv_display_t *s_disp = NULL;
 
 /* ---------------- CALLBACKS ---------------- */
-
+/*
+ * LVGL tick callback 
+ */
 static void lv_tick_cb(void *arg)
 {
   lv_tick_inc(1);
@@ -73,6 +75,9 @@ static bool lcd_flush_ready_cb(esp_lcd_panel_io_handle_t io, esp_lcd_panel_io_ev
   return false;
 }
 
+/**
+ * LCD Flush callback. Swaps bytes if enabled and puts data to LCD
+ */
 static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
 {
 #if !SWAP_BYTES
@@ -106,9 +111,13 @@ static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px
 /* ---------------- TASK ---------------- */
 extern QueueHandle_t ui_event_queue;
 
+/**
+ *  this is the main UI task
+ */
 static void lvgl_task(void *arg)
 {
   ESP_LOGI(TAG, "Starting LVGL main loop");
+  // init user interface
   init_gui();
   ui_event_t evt;
 
@@ -117,7 +126,7 @@ static void lvgl_task(void *arg)
     uint32_t time_till_next = lv_timer_handler();
     while (xQueueReceive(ui_event_queue, &evt, 0))
     {
-      switch (evt)
+      switch (evt.type)
       {
       case UI_WIFI_CONNECTED:
       //TODO:
@@ -134,8 +143,10 @@ static void lvgl_task(void *arg)
         
         break;
       case UI_WIFI_SCAN_RESULT:
-      ui_wifi_scan_result_t res;
-        xQueueReceive(ui_event_queue, &res, 0);
+        // triggered if wifi_scan_result is true
+        ui_wifi_scan_result_t res;
+        res = evt.wifi_scan;
+        // xQueueReceive(ui_event_queue, &res, 0);
         ui_wifi_add_result_to_wifi_list(&res);
         break;
 

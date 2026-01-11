@@ -13,7 +13,7 @@ typedef enum {
     UI_SYSTEM_STARTING,
     UI_SYSTEM_STARTED,
 
-} ui_event_t;
+} ui_event_type_t;
 
 
 typedef struct {
@@ -25,3 +25,10 @@ typedef struct {
 typedef struct {
     wifi_ap_item_t ap;
 } ui_wifi_scan_result_t;
+
+typedef struct {
+    ui_event_type_t type;
+    union {
+        ui_wifi_scan_result_t wifi_scan;
+    };
+} ui_event_t;

@@ -234,14 +234,14 @@ static void wifi_event_handler(void *arg,
     {
 
     case WIFI_EVENT_STA_START:
-      evt = UI_WIFI_CONNECTING;
+      evt.type = UI_WIFI_CONNECTING;
       xQueueSend(ui_event_queue, &evt, 0);
 
       wifi_reconnect();
       break;
 
     case WIFI_EVENT_STA_DISCONNECTED:
-      evt = UI_WIFI_CONNECTING;
+      evt.type = UI_WIFI_CONNECTING;
       xQueueSend(ui_event_queue, &evt, 0);
 
       if (s_retry_num < MAX_RETRY)
@@ -257,7 +257,7 @@ static void wifi_event_handler(void *arg,
       break;
     case WIFI_EVENT_SCAN_DONE:
       handle_scan_done();
-      evt = UI_WIFI_SCAN_DONE;
+      evt.type = UI_WIFI_SCAN_DONE;
       xQueueSend(ui_event_queue, &evt, 0);
       break;
 
@@ -271,7 +271,7 @@ static void wifi_event_handler(void *arg,
 
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
     ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
-    evt = UI_WIFI_CONNECTED;
+    evt.type = UI_WIFI_CONNECTED;
     xQueueSend(ui_event_queue, &evt, 0);
 
     s_retry_num = 0;
@@ -279,6 +279,10 @@ static void wifi_event_handler(void *arg,
   }
 }
 
+/**
+ * Scan for wifi access points (APs)
+ * Retrieving wifi list happens in the handle_scan_done function
+ */
 uint8_t wifi_scan(void)
 {
   if (s_current_state == WIFI_STATE_SCANNING)
@@ -303,13 +307,13 @@ uint8_t wifi_scan(void)
       .scan_type = WIFI_SCAN_TYPE_ACTIVE};
 
   esp_err_t err = esp_wifi_scan_start(&scan_cfg, false);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Scan failed: %s", esp_err_to_name(err));
-        return err;
-    }
+  if (err != ESP_OK)
+  {
+    ESP_LOGE(TAG, "Scan failed: %s", esp_err_to_name(err));
+    return err;
+  }
 
-    // handle_scan_done();
-    return ESP_OK;
+  return ESP_OK;
 }
 
 static void handle_scan_done(void)
@@ -323,7 +327,9 @@ static void handle_scan_done(void)
     s_current_state = WIFI_STATE_IDLE;
     return;
   }
+  ESP_LOGI("WIFI", "Found %d APS", count);
 
+  /* Allocate place for found records */
   wifi_ap_record_t *records = malloc(sizeof(wifi_ap_record_t) * count);
   esp_wifi_scan_get_ap_records(&count, records);
 
@@ -331,39 +337,35 @@ static void handle_scan_done(void)
   wifi_ap_info_t *list = malloc(sizeof(wifi_ap_info_t) * count);
   for (int i = 0; i < count; i++)
   {
+    ui_wifi_scan_result_t scan_result = {0};
+
+    /* copy from records to list */
     strncpy(list[i].ssid, (char *)records[i].ssid, 32);
-    list[i].ssid[32] = 0;
+    list[i].ssid[32] = '\0';
     list[i].rssi = records[i].rssi;
     list[i].authmode = records[i].authmode;
-  }
-
-  // ui_wifi_show_list(list, count); // UI callback
-  int i;
-  for (i = 0; i < count; i++)
-  {
-    printf("%s -- %d \n", list[i].ssid, list[i].rssi);
-    ui_wifi_scan_result_t evt = {0};
-
-    strncpy(evt.ap.ssid,
-            (char *)list[i].ssid,
-            sizeof(evt.ap.ssid) - 1);
-
-    evt.ap.rssi = list[i].rssi;
-    evt.ap.secure = list[i].authmode != WIFI_AUTH_OPEN;
-
-    ui_event_t type = UI_WIFI_SCAN_RESULT;
-    xQueueSend(ui_event_queue, &type, 0);
-    xQueueSend(ui_event_queue, &evt, 0);
-  }
-
     
-ui_event_t done = UI_WIFI_SCAN_DONE;
-xQueueSend(ui_event_queue, &done, 0);
+    ESP_LOGI("WIFI", "%s -- %d", list[i].ssid, list[i].rssi);
+    
+    strncpy(scan_result.ap.ssid, list[i].ssid, 32);
+    scan_result.ap.ssid[32]= '\0';      // last char is terminating 0. security reasons
+    scan_result.ap.rssi = list[i].rssi;
+    scan_result.ap.secure = list[i].authmode != WIFI_AUTH_OPEN;
+    
 
+    ui_event_t event = {0};
+    event.type = UI_WIFI_SCAN_RESULT;
+    event.wifi_scan = scan_result;
+    xQueueSend(ui_event_queue, &event, 0);
+  }
+
+  ui_event_t done_evt = {0};
+  done_evt.type = UI_WIFI_SCAN_DONE;
+  xQueueSend(ui_event_queue, &done_evt, 0);
+
+  /* Free Memory*/
   free(records);
   free(list);
 
-
   s_current_state = WIFI_STATE_IDLE;
-
 }

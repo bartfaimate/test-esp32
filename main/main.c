@@ -16,9 +16,8 @@
 #define MAIN_TASK_CORE_ID 0
 #define MAIN_TASK_PRIO 5
 
-const char * SSID = "";
-const char * PASSWORD = "";
-
+const char *SSID = "";
+const char *PASSWORD = "";
 
 void driver_init()
 {
@@ -42,20 +41,22 @@ void driver_init()
   print_cpu_freq();
 
   ESP_ERROR_CHECK(nvs_flash_init());
-  
+
   uint8_t wifi_inited;
   wifi_inited = wifi_init();
 
   return;
 }
 
-void wifi_task(void *arg) {
+void wifi_task(void *arg)
+{
   // ESP_ERROR_CHECK(wifi_connect(SSID, PASSWORD));
   wifi_scan();
   vTaskDelete(NULL);
 }
 
-void main_task(void *arg) {
+void main_task(void *arg)
+{
   while (1)
   {
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -74,24 +75,22 @@ void app_main(void)
   lvgl_start();
 
   xTaskCreatePinnedToCore(
-    wifi_task,
-    "wifi",
-    4096,
-    NULL,
-    4,
-    NULL,
-    0
-);
- 
-  xTaskCreatePinnedToCore(
-        main_task,
-        "main",
-        MAIN_TASK_STACK,
-        NULL,
-        MAIN_TASK_PRIO,
-        NULL,
-        MAIN_TASK_CORE_ID);
-    
-    vTaskDelete(NULL);   // VERY IMPORTANT 
+      wifi_task,
+      "wifi",
+      4096,
+      NULL,
+      4,
+      NULL,
+      0);
 
+  xTaskCreatePinnedToCore(
+      main_task,
+      "main",
+      MAIN_TASK_STACK,
+      NULL,
+      MAIN_TASK_PRIO,
+      NULL,
+      MAIN_TASK_CORE_ID);
+
+  vTaskDelete(NULL); // VERY IMPORTANT
 }
