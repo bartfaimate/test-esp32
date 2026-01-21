@@ -10,16 +10,19 @@
 #include "freertos/queue.h"
 
 
-extern QueueHandle_t ui_event_queue;
+/* ------------------------ EXTERN --------------------------*/
+extern QueueHandle_t ui_event_queue;  /* global que for holding events */
 
-static lv_obj_t *wifi_label;
-static lv_obj_t *settings_tab = NULL ;
+/* ------------------------ STATIC --------------------------*/
+static lv_obj_t *home_tab = NULL; /** tab which holds all the components for home */
+static lv_obj_t *settings_tab = NULL; /** tab which holds all the settings ui components */
+static lv_obj_t *wifi_list = NULL; /** msgbox with list  */
+static void create_brightness_slider(lv_obj_t *parent);
 
-static void brightness_slider(lv_obj_t *parent);
 
-static lv_obj_t *wifi_list = NULL;
-
-
+/**
+ * on button clicked we send an event to the main LVGL_TASK
+ */
 static void wifi_btn_cb(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_CLICKED)
@@ -51,12 +54,12 @@ void lv_tabview(lv_obj_t *screen)
     tabview = lv_tabview_create(screen);
 
     /*Add 3 tabs (the tabs are page (lv_page) and can be scrolled*/
-    lv_obj_t * tab1 = lv_tabview_add_tab(tabview, "Home");
+    home_tab = lv_tabview_add_tab(tabview, "Home");
     settings_tab = lv_tabview_add_tab(tabview, "Settings");
 
-    lv_obj_set_style_bg_color(tab1, lv_color_hex(0x0000ff), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(home_tab, lv_color_hex(0x0000ff), LV_PART_MAIN);
 
-    brightness_slider(settings_tab);
+    create_brightness_slider(settings_tab);
 
     lv_obj_t *wifi_button = ui_wifi_button_create(settings_tab, wifi_btn_cb);
     lv_obj_align(wifi_button, LV_ALIGN_TOP_RIGHT, -10, 10);
@@ -71,7 +74,7 @@ static void brightness_slider_event_cb(lv_event_t * e)
     set_brightness(value);
 }
 
-static void brightness_slider(lv_obj_t *parent) {
+static void create_brightness_slider(lv_obj_t *parent) {
     /*Create a slider in the center of the display*/
     lv_obj_t * slider = lv_slider_create(parent);
     lv_slider_set_range(slider, 10, 100);
@@ -81,9 +84,13 @@ static void brightness_slider(lv_obj_t *parent) {
     lv_obj_add_event_cb(slider, brightness_slider_event_cb, LV_EVENT_VALUE_CHANGED, NULL);     /*Assign an event function*/
 }
 
+/**
+ * initialise UI 
+ * get screen
+ * add. tabview
+ */
 void init_gui() {
     lv_obj_t *screen = lv_screen_active();
-    // lv_obj_set_style_bg_color(screen, lv_color_hex(0x0000ff), LV_PART_MAIN);
     lv_tabview(screen);
 
  

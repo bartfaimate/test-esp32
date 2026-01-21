@@ -137,7 +137,13 @@ static void lvgl_task(void *arg)
       //TODO:
 
         break;
+      case UI_WIFI_CONNECTING:
+        /* creates a new popup and keyboard */
+        
+        
+      break;
       case UI_WIFI_SCAN_START:
+        /** start scanning and creates a list with entries */
         wifi_scan();
         create_wifi_list();
         

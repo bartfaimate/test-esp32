@@ -6,6 +6,13 @@
 #include "ui_events.h"
 
 
+/** holding data for each APs from the buttons */
+typedef struct {
+  char ssid[33];
+  bool secure;
+} ui_wifi_ap_userdata_t;
+
+
 lv_obj_t *ui_wifi_button_create(
   lv_obj_t *parent,
   lv_event_cb_t event_cb
