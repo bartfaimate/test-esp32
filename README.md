@@ -17,3 +17,11 @@ I will use Wifi, make HTTP requests, parse json response, render HA entities on 
 * Queries devices, parses and puts controllable devices into folders by location.
 
 To be continued.....
+
+## Used components:
+* esp-idf
+* lvgl
+* C lang
+
+## Build:
+TODO
