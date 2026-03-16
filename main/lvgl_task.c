@@ -113,6 +113,7 @@ extern QueueHandle_t ui_event_queue;
 
 /**
  *  this is the main UI task
+ *  it handles all kind of events
  */
 static void lvgl_task(void *arg)
 {
@@ -155,6 +156,12 @@ static void lvgl_task(void *arg)
         // xQueueReceive(ui_event_queue, &res, 0);
         ui_wifi_add_result_to_wifi_list(&res);
         break;
+      
+      case UI_WIFI_AP_SELECTED:
+        /** user initiate ap connect */
+        ui_wifi_ap_userdata_t user_data  = evt.user_data;
+
+        printf("selected: %s -- secure: %d\n", user_data.ssid, user_data.secure);
 
       default:
         break;
@@ -166,6 +173,11 @@ static void lvgl_task(void *arg)
 
 /* ---------------- INIT ---------------- */
 
+/**
+ * Initialise LCD display
+ * init SPI bus for LCD
+ * init touch controls
+ */
 void lcd_init(void)
 {
   /* 1. SPI Bus Initialization */
@@ -210,6 +222,11 @@ void lcd_init(void)
   ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
 }
 
+/**
+ * start the LVGL process
+ * init LCD, init lvgl module
+ * 
+ */
 void lvgl_start(void)
 {
   /* init LCD */
@@ -269,6 +286,9 @@ void backlight_init() {
 
 }
 
+/**
+ * set brightness callback
+ */
 void set_brightness(uint8_t brightness) {
   if (brightness > 100) brightness = 100;
 

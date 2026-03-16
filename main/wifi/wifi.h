@@ -1,3 +1,8 @@
+/**********************************************
+ * Wifi related functions.                    *
+ * Init, discover, connect .....              *
+ *  are handled here                          *
+ **********************************************/
 #ifndef WIFI_H
 #define WIFI_H
 

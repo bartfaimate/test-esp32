@@ -10,12 +10,15 @@
 #include "freertos/queue.h"
 
 /* ------------------------ EXTERN --------------------------*/
-extern QueueHandle_t ui_event_queue; /* global que for holding events */
+extern QueueHandle_t ui_event_queue;    /* global que for holding events */
 
 /* ------------------------ STATIC --------------------------*/
-static lv_obj_t *s_wifi_list = NULL;  /* List for holding buttons */
-static lv_obj_t *s_msg_box = NULL;    /* Message box for holdin wifi list */
+static lv_obj_t *s_wifi_list = NULL;    /* List for holding buttons */
+static lv_obj_t *s_msg_box = NULL;      /* Message box for holdin wifi list */
 
+
+static void ui_wifi_msgbox_destroy();
+static void ui_wifi_msgbox_event_cb(lv_event_t *e);
 
 /**
  * Create button with wifi icon which handles search and opens a popup
@@ -84,12 +87,20 @@ static void ui_wifi_ap_button_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t *obj = lv_event_get_target(e);
+    ui_event_t evt;
+    ui_wifi_ap_userdata_t *user_data;
+    user_data = lv_obj_get_user_data(obj);
 
     if (code == LV_EVENT_CLICKED) {
         // TODO: add event handling for buttons
       // WHAT TO PUT HERE? 
+      evt.type = UI_WIFI_AP_SELECTED;
+      evt.user_data.secure = user_data->secure ;
 
+      strcpy( evt.user_data.ssid, user_data->ssid );
+      ui_wifi_msgbox_destroy();
     }
+    xQueueSend(ui_event_queue, &evt, 0);
 }
 
 /**
@@ -126,6 +137,17 @@ void ui_wifi_add_result_to_wifi_list(ui_wifi_scan_result_t *res) {
 }
 
 
+static void ui_wifi_msgbox_destroy() {
+    ESP_LOGI("UI_WIFI", "Destroying Listbox");
+    if (s_wifi_list) {
+        lv_obj_delete(s_wifi_list);
+        s_wifi_list = NULL;
+    }
+    if (s_msg_box) {
+        lv_obj_delete(s_msg_box);
+        s_msg_box = NULL; /** why? TODO: delete */
+    }
+}
 
 /**
  * When destroying (cancelling widget)
@@ -136,8 +158,7 @@ static void ui_wifi_msgbox_event_cb(lv_event_t *e)
     lv_obj_t *obj = lv_event_get_target(e);
 
     if (code == LV_EVENT_DELETE) {
-        s_msg_box = NULL;
-        s_wifi_list = NULL;
+       ui_wifi_msgbox_destroy();
         ESP_LOGI("UI_WIFI", "WiFi msgbox destroyed");
     }
 }

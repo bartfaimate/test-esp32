@@ -1,3 +1,6 @@
+/**********************************************
+ * Wifi related UI elements and handlers      *
+ **********************************************/
 #ifndef ui_wifi_h
 #define ui_wifi_h
 
@@ -5,12 +8,6 @@
 #include "lvgl.h"
 #include "ui_events.h"
 
-
-/** holding data for each APs from the buttons */
-typedef struct {
-  char ssid[33];
-  bool secure;
-} ui_wifi_ap_userdata_t;
 
 
 lv_obj_t *ui_wifi_button_create(

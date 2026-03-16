@@ -218,7 +218,7 @@ uint8_t wifi_reconnect()
 
 uint8_t wifi_disconnect()
 {
-  return 0;
+  return esp_wifi_disconnect();
 }
 
 static void wifi_event_handler(void *arg,
@@ -234,25 +234,33 @@ static void wifi_event_handler(void *arg,
     {
 
     case WIFI_EVENT_STA_START:
-      evt.type = UI_WIFI_CONNECTING;
-      xQueueSend(ui_event_queue, &evt, 0);
+      if (s_current_state == WIFI_STATE_CONNECTING)
+      {
 
-      wifi_reconnect();
+        evt.type = UI_WIFI_CONNECTING;
+        xQueueSend(ui_event_queue, &evt, 0);
+        wifi_reconnect();
+      }
       break;
 
     case WIFI_EVENT_STA_DISCONNECTED:
-      evt.type = UI_WIFI_CONNECTING;
-      xQueueSend(ui_event_queue, &evt, 0);
+    /** should reconnect if it was connected */
+      if (s_current_state == WIFI_STATE_CONNECTED)
+      {
 
-      if (s_retry_num < MAX_RETRY)
-      {
-        wifi_reconnect();
-        s_retry_num++;
-        ESP_LOGW(TAG, "Retrying connection (%d)", s_retry_num);
-      }
-      else
-      {
-        xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+        evt.type = UI_WIFI_CONNECTING;
+        xQueueSend(ui_event_queue, &evt, 0);
+
+        if (s_retry_num < MAX_RETRY)
+        {
+          wifi_reconnect();
+          s_retry_num++;
+          ESP_LOGW(TAG, "Retrying connection (%d)", s_retry_num);
+        }
+        else
+        {
+          xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+        }
       }
       break;
     case WIFI_EVENT_SCAN_DONE:
@@ -344,14 +352,13 @@ static void handle_scan_done(void)
     list[i].ssid[32] = '\0';
     list[i].rssi = records[i].rssi;
     list[i].authmode = records[i].authmode;
-    
+
     ESP_LOGI("WIFI", "%s -- %d", list[i].ssid, list[i].rssi);
-    
+
     strncpy(scan_result.ap.ssid, list[i].ssid, 32);
-    scan_result.ap.ssid[32]= '\0';      // last char is terminating 0. security reasons
+    scan_result.ap.ssid[32] = '\0'; // last char is terminating 0. security reasons
     scan_result.ap.rssi = list[i].rssi;
     scan_result.ap.secure = list[i].authmode != WIFI_AUTH_OPEN;
-    
 
     ui_event_t event = {0};
     event.type = UI_WIFI_SCAN_RESULT;

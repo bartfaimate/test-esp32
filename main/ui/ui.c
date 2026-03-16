@@ -38,10 +38,23 @@ lv_obj_t *create_wifi_list() {
     lv_obj_del(wifi_list);
   }
 
-  // wifi_list = ui_wifi_create_wifi_list(settings_tab);
   wifi_list = ui_wifi_msg_box();
   lv_obj_center(wifi_list);
   return wifi_list;
+}
+
+
+/**
+ * destorys the message box and sets wifi list tu NULL
+ */
+lv_obj_t * destroy_wifi_list() {
+  if(! wifi_list) {
+    return NULL;
+  }
+
+  lv_obj_delete(wifi_list);
+  wifi_list = NULL;
+  return NULL;
 }
 
 

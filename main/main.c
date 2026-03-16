@@ -51,7 +51,7 @@ void driver_init()
 void wifi_task(void *arg)
 {
   // ESP_ERROR_CHECK(wifi_connect(SSID, PASSWORD));
-  wifi_scan();
+  // wifi_scan();
   vTaskDelete(NULL);
 }
 
